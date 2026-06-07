@@ -5,7 +5,7 @@
 	// https://containers.dev/implementors/json_reference/#general-properties
 	"name": "T3Prj: Common TYPO3 v.14.3 LTS Environment",
 	"containerEnv": {
-		"SHELL": "/bin/bash"
+		"SHELL": "/bin/zsh"
 	},
 	"forwardPorts": [
 		8080

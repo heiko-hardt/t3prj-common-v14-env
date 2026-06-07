@@ -2,91 +2,74 @@
 # Source: https://github.com/docker-library/php/blob/master/8.4/trixie/apache/Dockerfile
 FROM php:8.4.22-apache-trixie
 
-# Set environment variables for user and group configuration
+# Application User & Group
 ARG APP_USER_NAME=developer 
 ARG APP_USER_ID=1000
 ARG APP_GROUP_NAME=developer
 ARG APP_GROUP_ID=1000
 
-ARG WEB_DOCUMENT_ROOT=/var/www/html/public
-ARG WEB_SERVER_ADMIN=webmaster@localhost
+# Webserver
 ARG WEB_SERVER_NAME=localhost
-ARG WEB_SERVER_ALIAS=www.localhost
+ARG WEB_DOCUMENT_ROOT=/var/www/html/public
 
-# !!! ONLY FOR TESTING/DEVELOPMENT !!!
-
-# Install additional packages (git, make, vim)
+# Common tools and local settings
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends git make vim
-
-# Set root and add sudo support 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends sudo \
+    && apt-get install -y --no-install-recommends \
+        locales \
+        sudo \
     && rm -rf /var/lib/apt/lists/* \
-    # Configuration sudoers
-    && echo "Defaults env_keep=\"http_proxy https_proxy no_proxy\"" > /etc/sudoers.d/defaults \
-    && chmod 0440 /etc/sudoers.d/defaults \
-    # Set root password: pass
-    && echo "root:pass" | chpasswd
+    && echo "en_US.UTF-8 UTF-8" > /etc/locale.gen \
+    && locale-gen
 
-# Set application user and group
+# System user and group
 RUN groupadd -g $APP_GROUP_ID $APP_GROUP_NAME \
     && useradd -u $APP_USER_ID -g $APP_GROUP_ID -m -s /bin/bash $APP_USER_NAME \
     && echo $APP_USER_NAME ALL=\(root\) NOPASSWD:ALL >/etc/sudoers.d/$APP_USER_NAME \
-    && chmod 0440 /etc/sudoers.d/$APP_USER_NAME \
-    && sed -i "s|\${APACHE_RUN_USER\:=www-data}|\${APACHE_RUN_USER\:=$APP_USER_NAME}|g" /etc/apache2/envvars \
-	&& sed -i "s|\${APACHE_RUN_GROUP\:=www-data}|\${APACHE_RUN_GROUP\:=$APP_GROUP_NAME}|g" /etc/apache2/envvars
+    && chmod 0440 /etc/sudoers.d/$APP_USER_NAME
 
-# Setup Apache
+# Apache Webserver
 RUN echo "ServerName localhost" > /etc/apache2/conf-available/servername.conf \
     && a2enconf servername \
     # Enable module(s)
     && a2enmod rewrite \
-    # Configure hosts file(s)
+    # Configure document root
     ###############################################################################################
-    && a2dissite 000-default \
-    && mv /etc/apache2/sites-available/000-default.conf /etc/apache2/sites-available/default.conf \
-    && sed -i -e "s|/var/www/html|$WEB_DOCUMENT_ROOT|g" /etc/apache2/sites-available/default*.conf \
-    && sed -i -e "s|ServerAdmin webmaster@localhost|ServerAdmin $WEB_SERVER_ADMIN\n\n\tServerName $WEB_SERVER_NAME\n\tServerAlias $WEB_SERVER_ALIAS|g" /etc/apache2/sites-available/default*.conf \
+    && sed -i -e "s|/var/www/html|$WEB_DOCUMENT_ROOT|g" /etc/apache2/sites-available/*.conf \
     # Configure ports
     && sed -i "s|Listen 80|Listen 8080|g" /etc/apache2/ports.conf \
-    && sed -i "s|\:80>|\:8080>|g" /etc/apache2/sites-available/default*.conf \
-    # Enable site(s)
-    && a2ensite default
+    && sed -i "s|\:80>|\:8080>|g" /etc/apache2/sites-available/*.conf \
+    # Configure user
+    && sed -i "s|\${APACHE_RUN_USER\:=www-data}|\${APACHE_RUN_USER\:=$APP_USER_NAME}|g" /etc/apache2/envvars \
+	&& sed -i "s|\${APACHE_RUN_GROUP\:=www-data}|\${APACHE_RUN_GROUP\:=$APP_GROUP_NAME}|g" /etc/apache2/envvars
 
 
-# https://github.com/php/pie/releases
-ARG PIE_VERSION="1.4.0"
-
-# PHP extensions: gd, intl, pdo_mysql, zip
+# PHP extensions: exif, gd, intl, pdo_mysql, zip
 # https://docs.typo3.org/m/typo3/reference-coreapi/main/en-us/Administration/Installation/SystemRequirements/Index.html
 ###################################################################################################
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
+    && apt-get install -y --no-install-recommends \       
         ghostscript \
         graphicsmagick \
-        libavif-dev \
         libfreetype-dev \
-        libjpeg62-turbo-dev \
         libicu-dev \
-        libpng-dev \
-        libwebp-dev \
-        libxpm-dev \
+		libjpeg62-turbo-dev \
+		libpng-dev \
         libzip-dev \
     && rm -rf /var/lib/apt/lists/* \
-    && curl -L https://github.com/php/pie/releases/download/${PIE_VERSION}/pie.phar -o /usr/local/bin/pie \
-    && chmod +x /usr/local/bin/pie \
-    && docker-php-ext-configure gd --with-jpeg --with-xpm --with-webp --with-freetype --with-avif \
-    && docker-php-ext-install gd \
-    && docker-php-ext-install intl \
-    && docker-php-ext-install pdo_mysql \
-    && docker-php-ext-install zip
+    && docker-php-ext-install exif \
+    && docker-php-ext-configure gd --with-freetype --with-jpeg \
+    && docker-php-ext-install -j$(nproc) gd \
+    && docker-php-ext-install -j$(nproc) intl \
+    && docker-php-ext-install -j$(nproc) pdo_mysql \
+    && docker-php-ext-install -j$(nproc) zip
 
 
 # https://getcomposer.org/download/ (Latest LTS)
 ARG COMPOSER_VERSION="2.10.1"
 # https://packagist.org/packages/xdebug/xdebug
 ARG PHP_XDEBUG_VERSION="3.5.1"
+# https://github.com/php/pie/releases
+ARG PIE_VERSION="1.4.0"
 # https://github.com/aptible/supercronic/releases
 ARG SUPERCRONIC_VERSION="0.2.34"
 # Target architecture setup by buildx (linux/amd64, linux/arm64, linux/arm/v7)
@@ -95,6 +78,8 @@ ARG TARGETARCH
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         default-mysql-client \
+        git \
+        git-flow \
         make \
         mc \
         openssh-client \
@@ -104,7 +89,10 @@ RUN apt-get update \
         wget \
         zsh \
     && rm -rf /var/lib/apt/lists/* \
-    # Update PHP setup
+    # Setup PIE (PHP Installer for Extensions)
+    && curl -L https://github.com/php/pie/releases/download/${PIE_VERSION}/pie.phar -o /usr/local/bin/pie \
+    && chmod +x /usr/local/bin/pie \
+    # Install Extension(s)
     && pie install xdebug/xdebug:${PHP_XDEBUG_VERSION} \
     # Copy php ini (php.ini-development|php.ini-production)
     && cp "$PHP_INI_DIR/php.ini-development" "$PHP_INI_DIR/php.ini" \
@@ -116,6 +104,16 @@ RUN apt-get update \
     && curl -fsSLO "https://github.com/aptible/supercronic/releases/download/v${SUPERCRONIC_VERSION}/supercronic-linux-${TARGETARCH}" \
     && chmod +x "supercronic-linux-${TARGETARCH}" \
     && mv "supercronic-linux-${TARGETARCH}" /usr/local/bin/supercronic
+
+
+USER ${APP_USER_NAME}:${APP_GROUP_NAME}
+
+ENV TZ=Europe/Berlin \
+    LANG=en_US.UTF-8 \
+    LANGUAGE=en_US.UTF-8 \
+    LC_ALL=en_US.UTF-8
+
+RUN curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh | zsh
 
 EXPOSE 8080
 
