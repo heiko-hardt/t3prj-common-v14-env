@@ -5,6 +5,7 @@
     "type": "project",
     "config": {
         "allow-plugins": {
+            "helhum/dotenv-connector": true,
             "typo3/class-alias-loader": true,
             "typo3/cms-composer-installers": true
         },
@@ -48,6 +49,7 @@
     },
     "require-dev": {
         "helhum/config-loader": "^0.12.6",
+        "helhum/dotenv-connector": "^3.2",
         "helhum/typo3-console": "^9.0"
     }
 }
