@@ -45,5 +45,9 @@
             "type": "path",
             "url": "./packages/*"
         }
+    },
+    "require-dev": {
+        "helhum/config-loader": "^0.12.6",
+        "helhum/typo3-console": "^9.0"
     }
 }
